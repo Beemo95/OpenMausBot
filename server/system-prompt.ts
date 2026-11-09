@@ -1,3 +1,4 @@
+import { localVmAdminEnabled } from "./local-vm-admin.ts";
 // One builder for every turn's system prompt, so what a bot receives and the "what the model sees" preview are the same bytes.
 import { soulSystemPrompt } from "./bot-folder.ts";
 import { theirComputer } from "./lent-computers.ts";
@@ -129,7 +130,12 @@ export function savedLoginsPrompt(logins: ReadonlyArray<LoginPlace & { username:
 
 export function computerPrompt(kind: ComputerPromptKind | null): string {
   if (!kind) return "";
-  return COMPUTER_PARAGRAPH[kind] + SIGN_IN_PROMPT;
+  let paragraph = COMPUTER_PARAGRAPH[kind];
+  if ((kind === "vm-shared" || kind === "vm-private") && localVmAdminEnabled()) {
+    paragraph = paragraph.replace("Only /home/cua/workspace is durable; save downloads, repositories, working files, and browser profiles there because everything else inside the VM is disposable.", "Your whole /home/cua home and /home/cua/workspace are durable. Use the workspace for repositories and shared project files.");
+    paragraph += " This development VM has passwordless sudo and ordinary container administrator capabilities. You may install OS packages, development tools and applications, manage permissions, and repair dependencies there as needed for the user's task without asking again. Use vm_exec for commands and sudo -n for administrative commands. When access fails, inspect id, ownership, modes and the actual error, then repair inside this VM; do not confuse VM root with host access. All bots using this shared desktop see the same installed apps and files. A host path and a VM path can name different files: use vm_exec for VM files. Existing GitHub CLI and application sessions belong to this VM user; check gh auth status without printing tokens. Run diagnostics and reasonable alternative repairs before declaring a blocker.";
+  }
+  return paragraph + SIGN_IN_PROMPT;
 }
 
 export const CLOUD_HOME_PLACE = "the user's My Cloud, their always-on OpenMausBot in the cloud, not on their own computer";
@@ -217,7 +223,7 @@ export const CREDENTIAL_PROMPT =
 /** Ten minutes stays inside the 20-minute turn stall watchdog, which sees nothing while a command runs. */
 export const BASH_MAX_TIMEOUT_MS = 600_000;
 const LONG_COMMANDS_TEXT =
-  ` Long-running shell commands: a shell call is stopped after a default limit (2 minutes for a Bash call) and the output of a stopped command is lost. Before running anything that can take more than a minute, such as transcription (whisper), ffmpeg or ffprobe over long media, renders, large builds or big file transfers, either pass a longer per-call timeout (Bash takes \`timeout\` in milliseconds, up to ${BASH_MAX_TIMEOUT_MS}) or start it detached with its output in a file (\`nohup <command> > /tmp/<job>.log 2>&1 &\`) and check that file in later calls. Never scan the whole disk with \`find /\` or similar: search by name with \`mdfind -name\` on macOS, or search a specific folder such as your workspace or home with a depth limit. If a command times out, do not rerun it the same way. Never wait inside a command for CI, a deploy or any other job to finish (no sleep loops or repeated polls): check it once, and if it is still running, tell the person what you made (with links), set wait_until or a one-time trigger to check back, and end your turn. When the person writes while you work, answer them first.`;
+  ` Long-running shell commands: a shell call is stopped after a default limit (2 minutes for a Bash call) and the output of a stopped command is lost. Before running anything that can take more than a minute, such as transcription (whisper), ffmpeg or ffprobe over long media, renders, large builds or big file transfers, either pass a longer per-call timeout (Bash takes \`timeout\` in milliseconds, up to ${BASH_MAX_TIMEOUT_MS}) or start it detached with its output in a file (\`nohup <command> > /tmp/<job>.log 2>&1 &\`) and check that file in later calls. Never scan the whole disk with \`find /\` or similar: search by name with \`mdfind -name\` on macOS, or search a specific folder such as your workspace or home with a depth limit. If a command times out, do not rerun it the same way. For running jobs, use bounded waits or polls and continue independent work, reporting progress while they run. If a job genuinely requires an extended unattended wait, register wait_until or a one-time continuation, verify that registration succeeded, and explain what will resume. Do not end the task merely because a command is still running, a first attempt failed, or a build needs another check. When the person writes while you work, answer them first.`;
 const VM_LONG_COMMANDS_TEXT =
   " In your Local VM, vm_exec takes `timeout_seconds` instead (default 60, at most 300); start anything longer detached the same way, inside the VM, and check its log with later vm_exec calls.";
 export function longCommandsPrompt(computer: ComputerPromptKind | null): string {
